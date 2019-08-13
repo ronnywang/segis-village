@@ -12,6 +12,18 @@
        * 可以用 docker run -p 5432:5432 --name some-postgis -e POSTGRES_PASSWORD= -d mdillon/postgis 建立一個暫時的 docker 資料庫
     5. 逐季做資料比對，並把發現變化存入 history.jsonl ，把變化的地理資料存入 output\_geojsons/ 資料夾下
 
+資料格式
+--------
+* history.jsonl
+  * 一行一個獨立的 json ，代表每個變動事件
+  * properties:
+    * act: 表示變動事件動作
+      * "init": 來自最早的資料
+      * "add": 新增的行政區
+      * "data-change": 行政區資料有變，地理沒有變動
+      * "remove": 行政區移除
+      * "geo-change": 行政區位置改變
+
 授權
 ----
 程式碼以 BSD License 授權
