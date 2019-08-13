@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>台灣村里資料</title>
+<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.3.1/css/bootstrap.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.5.1/dist/leaflet.css"
+integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+crossorigin=""/>
+<!-- Make sure you put this AFTER Leaflet's CSS -->
+<script src="https://unpkg.com/leaflet@1.5.1/dist/leaflet.js"
+integrity="sha512-GffPMF3RvMeYyc1LWMHtK8EbPv0iNZ8/oTtHPx9/cc2ILxQ+u905qIwdpULaqDkyBKgOaB57QTMg7ztg8Jm2Og=="
+   crossorigin=""></script>
+<style>
+html,body,div.container-fluid,.top-row .col,.top-row .card { height: 100%; max-height: 100% }
+div.top-row { height: 30%; max-height: 100%; }
+.top-row .area-list { height: 100%; max-height: 100%; overflow: scroll; }
+div.bottom-row { height: 70%};
+</style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row top-row">
+        <div class="col">
+            <div class="card" style="width: 18rem;">
+                <div class="card-body">
+                    <h5 class="card-title">縣市</h5>
+                    <h6 class="card-subtitle mb-2 text-muted" id="choose-county"></h6>
+                </div>
+                <div id="list-county" class="area-list list-group"></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card" style="width: 18rem;">
+                <div class="card-body">
+                    <h5 class="card-title">鄉鎮市區</h5>
+                    <h6 class="card-subtitle mb-2 text-muted" id="choose-town"></h6>
+                </div>
+                <div id="list-town" class="area-list list-group"></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card" style="width: 18rem;">
+                <div class="card-body">
+                    <h5 class="card-title">村里</h5>
+                    <h6 class="card-subtitle mb-2 text-muted" id="choose-village"></h6>
+                </div>
+                <div id="list-village" class="area-list list-group"></div>
+            </div>
+        </div>
+    </div>
+    <div class="row bottom-row">
+        <div class="col-9" id="mapid">
+        </div>
+        <div class="col-3">
+            <div class="card" style="width: 18rem;">
+                <div class="card-body">
+                    <h5 class="card-title">歷史資料</h5>
+                    <h6 class="card-subtitle mb-2 text-muted" id="choose-village"></h6>
+                </div>
+                <div id="list-history" class="list-group area-list"></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<script>
+var tree = {root: {}};
+var names = {};
+var histories = {};
+var colors = ['#3887be', '#8a8acb', '#56b881', '#50667f', '#41afa5', '#f9886c', '#e55e5e', '#ed6498', '#fbb03b', '#142736'];
+
+var get_full_name = function(area_id){
+    var county_id = area_id.substr(0, 5);
+    var town_id = area_id.substr(0, 8);
+    var village_id = area_id;
+    return names[county_id] + names[town_id] + names[village_id];
+};
+
+var load_area = function(area_id){
+    var target;
+    if (area_id.length == 5) {
+        target = 'town';
+        var county_id = area_id;
+        $('#list-county a').removeClass('active');
+        $('#area-' + county_id).addClass('active');
+        $('#choose-county').text(names[county_id]);
+    } else if (area_id.length == 8) {
+        target = 'village';
+        var county_id = area_id.substr(0, 5);
+        load_area(county_id);
+
+        var town_id = area_id;
+        $('#list-town a').removeClass('active');
+        $('#area-' + town_id).addClass('active');
+        $('#choose-town').text(names[town_id]);
+    } else {
+        // 村里、歷史資料
+        var town_id = area_id.substr(0, 8);
+        load_area(town_id);
+
+        var village_id = area_id;
+        $('#list-village a').removeClass('active');
+        $('#area-' + village_id).addClass('active');
+        $('#choose-village').text(names[village_id]);
+
+        $('#list-history').html('');
+        var current_geoid = null;
+        for (var i = 0; i < histories[area_id].length; i ++) {
+            var obj = histories[area_id][i];
+            var div_dom = $('<div></div>').attr('title', JSON.stringify(obj));;
+            if (obj.act == 'init') {
+                div_dom.text(obj.data.data.COUNTY + obj.data.data.TOWN + obj.data.data.VILLAGE);
+                current_geoid = obj.geoid;
+            } else if (obj.act == 'remove') {
+                div_dom.text("移除 " + get_full_name(obj.id) + " ，搬至：");
+                var p_dom = $('<p></p>').addClass('mb-1');
+                for (var j = 0; j < obj.data['move-to'].length; j ++) {
+                    var target_id = obj.data['move-to'][j][0];
+                    var target_name = get_full_name(target_id);
+                    p_dom.append(
+                            $('<button></button>')
+                            .text(target_name)
+                            .addClass('area-link')
+                            .css('background-color', colors[j])
+                            .data('area-id', target_id)
+                    );
+                }
+                div_dom.append(p_dom);
+            } else if (obj.act == 'add') {
+                div_dom.text("新增 " + get_full_name(obj.id) + " ，來自：");
+                var p_dom = $('<p></p>').addClass('mb-1');
+                for (var j = 0; j < obj.data['geo_from'].length; j ++) {
+                    var target_id = obj.data['geo_from'][j][0];
+                    var target_name = get_full_name(target_id);
+                    p_dom.append(
+                            $('<button></button>')
+                            .text(target_name)
+                            .addClass('area-link')
+                            .css('background-color', colors[j])
+                            .data('area-id', target_id)
+                    );
+                }
+                div_dom.append(p_dom);
+            } else if (obj.act == 'geo-change') {
+                div_dom.text("形狀改變，來自：");
+                var p_dom = $('<p></p>').addClass('mb-1');
+                for (var j = 0; j < obj.data['geo_from'].length; j ++) {
+                    var target_id = obj.data['geo_from'][j][0];
+                    var target_name = get_full_name(target_id);
+                    p_dom.append(
+                            $('<button></button>')
+                            .text(target_name)
+                            .addClass('area-link')
+                            .css('background-color', colors[j])
+                            .data('area-id', target_id)
+                    );
+                }
+                div_dom.append(p_dom);
+            } else if (obj.act == 'data-change') {
+                div_dom.text("改名為 " + obj.data.new.COUNTY + obj.data.new.TOWN + obj.data.new.VILLAGE);
+            } else {
+                // TODO
+                div_dom.text(JSON.stringify(obj));
+            }
+            $('#list-history').append($('<a></a>')
+                    .addClass('list-group-item')
+                    .attr('href', '#' + id)
+                    .append(obj.time)
+                    .append(div_dom)
+                    .data('history-data', obj)
+                    );
+        }
+        $('#list-history a:last').click();
+        return;
+    }
+    $('#list-' + target).html('');
+    for (var id in tree[area_id]) {
+        $('#list-' + target).append(
+                $('<a></a>')
+                .text(Object.keys(tree[area_id][id].name).join(',') + '(' + id + ')')
+                .attr('href', '#' + id)
+                .data('area-id', id)
+                .addClass('area-link')
+                .attr('id', 'area-' + id)
+                .addClass('list-group-item')
+                );
+    }
+};
+
+$.get('history.jsonl', function(lines){
+    var lines = lines.split("\n");
+    for (var i = 0; i < lines.length; i ++) {
+        if (lines[i] == '') { continue; }
+        var obj = JSON.parse(lines[i]);
+        var data = null;
+        if (obj.act == 'init') {
+            data = obj.data.data;
+        } else if (obj.act == 'data-change') {
+            data = obj.data.new;
+        } else if (obj.act == 'add') {
+            data = obj.data.data;
+        }
+
+        if (null !== data) {
+            var county_id = data.COUNTY_ID;
+            var town_id = data.TOWN_ID;
+            var village_id = data.V_ID;
+
+            names[county_id] = data.COUNTY;
+            names[town_id] = data.TOWN;
+            names[village_id] = data.VILLAGE;
+
+            if ('undefined' === typeof(tree.root[county_id])) {
+                tree.root[county_id] = {
+                    name: {},
+                };
+                tree[county_id] = {};
+            }
+            tree.root[county_id].name[data.COUNTY] = true;
+            if ('undefined' === typeof(tree[county_id][town_id])) {
+                tree[county_id][town_id] = {
+                    name: {},
+                }
+                tree[town_id] = {};
+            }
+            tree[county_id][town_id].name[data.TOWN] = true;
+            if ('undefined' === typeof(tree[town_id][village_id])) {
+                tree[town_id][village_id] = {
+                    name: {},
+                }
+            }
+            tree[town_id][village_id].name[data.VILLAGE] = true;
+        }
+
+        if ('undefined' === typeof(histories[obj.id])) {
+            histories[obj.id] = [];
+        }
+        histories[obj.id].push(obj);
+    }
+
+    for (var id in tree.root) {
+        $('#list-county').append(
+            $('<a></a>')
+            .text(Object.keys(tree.root[id].name).join(',') + '(' + id + ')')
+            .attr('href', '#' + id)
+            .data('area-id', id)
+            .addClass('area-link')
+            .attr('id', 'area-' + id)
+            .addClass('list-group-item list-group-item-action')
+        );
+    }
+
+    var feature_group = L.featureGroup();
+    feature_group.addTo(map);
+
+    var show_geojson = function(obj){
+        if (obj.act == 'init') {
+            $.get('output_geojsons/' + obj.data.geoid + '.json', function(obj){
+                var geojson = L.geoJSON(obj);
+                feature_group.addLayer(geojson);
+                map.fitBounds(feature_group.getBounds());
+            }, 'json');
+        } else if (obj.act == 'remove') {
+            var cb = function(){
+                map.fitBounds(feature_group.getBounds());
+            };
+
+            var waiting = obj.data['move-to'].length;
+            for (var i = 0; i < obj.data['move-to'].length; i ++) {
+                (function(i){
+                    $.get('output_geojsons/' + obj.data['move-to'][i][2] + '.json', function(obj){
+                        var geojson = L.geoJSON(obj, {style: {color: colors[i]}});
+                        feature_group.addLayer(geojson);
+                        waiting --;
+                        if (!waiting) cb();
+                    }, 'json');
+                })(i);
+            }
+        } else if (obj.act == 'geo-change' || obj.act == 'add') {
+            var cb = function(){
+                map.fitBounds(feature_group.getBounds());
+            };
+
+            var waiting = obj.data['geo_from'].length;
+            for (var i = 0; i < obj.data['geo_from'].length; i ++) {
+                (function(i){
+                    $.get('output_geojsons/' + obj.data['geo_from'][i][2] + '.json', function(obj){
+                        var geojson = L.geoJSON(obj, {style: {color: colors[i]}});
+                        feature_group.addLayer(geojson);
+                        waiting --;
+                        if (!waiting) cb();
+                    }, 'json');
+                })(i);
+            }
+        } else {
+            return;
+        }
+    };
+
+    $('#list-history').on('click', 'a', function(e){
+        $('#list-history a').removeClass('active');
+        $(this).addClass('active');
+        e.preventDefault();
+        var list_entry_dom = $(this);
+        feature_group.clearLayers();
+        var obj = $(this).data('history-data');
+        while (obj.act == 'data-change') {
+            list_entry_dom = list_entry_dom.prev();
+            obj = list_entry_dom.data('history-data');
+        };
+        show_geojson(obj);
+        feature_group.addTo(map);
+    });
+
+    $('.area-list').on('click', '.area-link', function(e){
+        var area_id = $(this).data('area-id');
+        load_area(area_id);
+    });
+    if (document.location.hash.match(/^#[0-9-]+/)) {
+        load_area(document.location.hash.substr(1));
+    }
+}, 'text');
+var map = L.map('mapid').setView([25.000659102852,121.51006510846], 14);
+L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP5/{Style}/{TileMatrixSet}/{z}/{y}/{x}', {
+    attribution: '&copy; <a href="http://maps.nlsc.gov.tw/S09SOA/">國土測繪圖資服務雲</a> contributors',
+    Style: 'default',
+    TileMatrixSet: 'GoogleMapsCompatible',
+}).addTo(map);
+
+</script>
+</body>
+</html>
