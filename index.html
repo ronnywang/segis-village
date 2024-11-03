@@ -69,6 +69,7 @@ div.bottom-row { height: 70%};
 var tree = {root: {}};
 var names = {};
 var histories = {};
+var id_map = {};
 var colors = ['#3887be', '#8a8acb', '#56b881', '#50667f', '#41afa5', '#f9886c', '#e55e5e', '#ed6498', '#fbb03b', '#142736'];
 
 var get_full_name = function(area_id){
@@ -107,67 +108,35 @@ var load_area = function(area_id){
 
         $('#list-history').html('');
         var current_geoid = null;
+        if ('undefined' !== typeof(id_map[area_id])) {
+            area_id = id_map[area_id];
+        }
         for (var i = 0; i < histories[area_id].length; i ++) {
             var obj = histories[area_id][i];
             var div_dom = $('<div></div>').attr('title', JSON.stringify(obj));;
             if (obj.act == 'init') {
-                div_dom.text(obj.data.data.COUNTY + obj.data.data.TOWN + obj.data.data.VILLAGE);
+                div_dom.text(obj.data.data.COUNTY + obj.data.data.TOWN + obj.data.data.VILLAGE + '(' + obj.data.data.V_ID + ')');
                 current_geoid = obj.geoid;
             } else if (obj.act == 'remove') {
-                div_dom.text("移除 " + get_full_name(obj.id) + " ，搬至：");
-                var p_dom = $('<p></p>').addClass('mb-1');
-                for (var j = 0; j < obj.data['move-to'].length; j ++) {
-                    var target_id = obj.data['move-to'][j][0];
-                    var target_name = get_full_name(target_id);
-                    p_dom.append(
-                            $('<button></button>')
-                            .text(target_name)
-                            .addClass('area-link')
-                            .css('background-color', colors[j])
-                            .data('area-id', target_id)
-                    );
-                }
-                div_dom.append(p_dom);
+                div_dom.text("移除 " + get_full_name(obj.id));
             } else if (obj.act == 'add') {
-                div_dom.text("新增 " + get_full_name(obj.id) + " ，來自：");
-                var p_dom = $('<p></p>').addClass('mb-1');
-                for (var j = 0; j < obj.data['geo_from'].length; j ++) {
-                    var target_id = obj.data['geo_from'][j][0];
-                    var target_name = get_full_name(target_id);
-                    p_dom.append(
-                            $('<button></button>')
-                            .text(target_name)
-                            .addClass('area-link')
-                            .css('background-color', colors[j])
-                            .data('area-id', target_id)
-                    );
-                }
-                div_dom.append(p_dom);
+                div_dom.text("新增 " + get_full_name(obj.id));
             } else if (obj.act == 'geo-change') {
-                div_dom.text("形狀改變，來自：");
-                var p_dom = $('<p></p>').addClass('mb-1');
-                for (var j = 0; j < obj.data['geo_from'].length; j ++) {
-                    var target_id = obj.data['geo_from'][j][0];
-                    var target_name = get_full_name(target_id);
-                    p_dom.append(
-                            $('<button></button>')
-                            .text(target_name)
-                            .addClass('area-link')
-                            .css('background-color', colors[j])
-                            .data('area-id', target_id)
-                    );
-                }
-                div_dom.append(p_dom);
+                div_dom.text("形狀改變");
             } else if (obj.act == 'data-change') {
-                div_dom.text("改名為 " + obj.data.new.COUNTY + obj.data.new.TOWN + obj.data.new.VILLAGE);
+                div_dom.text("改為 " + obj.data.new.COUNTY + obj.data.new.TOWN + obj.data.new.VILLAGE + '(' + obj.data.new.V_ID + ')');
             } else {
                 // TODO
                 div_dom.text(JSON.stringify(obj));
             }
+            if (obj.log) {
+                div_dom.append('<br>');
+                div_dom.append($('<code></code>').text(obj.log));
+            }
             $('#list-history').append($('<a></a>')
                     .addClass('list-group-item')
                     .attr('href', '#' + id)
-                    .append(obj.time)
+                    .append(obj.time ? obj.time : '')
                     .append(div_dom)
                     .data('history-data', obj)
                     );
@@ -208,6 +177,9 @@ $.get('history.jsonl', function(lines){
             var town_id = data.TOWN_ID;
             var village_id = data.V_ID;
 
+            if (village_id != obj.id) {
+                id_map[village_id] = obj.id;
+            }
             names[county_id] = data.COUNTY;
             names[town_id] = data.TOWN;
             names[village_id] = data.VILLAGE;
@@ -256,12 +228,13 @@ $.get('history.jsonl', function(lines){
     feature_group.addTo(map);
 
     var show_geojson = function(obj){
-        if (obj.act == 'init') {
             $.get('output_geojsons/' + obj.data.geoid + '.json', function(obj){
                 var geojson = L.geoJSON(obj);
                 feature_group.addLayer(geojson);
                 map.fitBounds(feature_group.getBounds());
             }, 'json');
+            return;
+        if (obj.act == 'init') {
         } else if (obj.act == 'remove') {
             var cb = function(){
                 map.fitBounds(feature_group.getBounds());
