@@ -76,6 +76,7 @@ div.bottom-row { height: 70%};
 <script>
 var tree = {root: {}};
 var names = {};
+var name_aliases = {};
 var histories = {};
 var id_map = {};
 var colors = ['#3887be', '#8a8acb', '#56b881', '#50667f', '#41afa5', '#f9886c', '#e55e5e', '#ed6498', '#fbb03b', '#142736'];
@@ -191,6 +192,10 @@ $.get('history.jsonl', function(lines){
             names[county_id] = data.COUNTY;
             names[town_id] = data.TOWN;
             names[village_id] = data.VILLAGE;
+            if (data.VILLAGE_ALIAS.length) {
+                name_aliases[village_id] = data.VILLAGE_ALIAS.replace(';', '');
+            }
+            
 
             if ('undefined' === typeof(tree.root[county_id])) {
                 tree.root[county_id] = {
@@ -308,25 +313,35 @@ $('#search-box').on('input', function(){
     var search_text = $(this).val();
     $('#list-search').html('');
     for (var id in names) {
+        hit = false;
         if (names[id].indexOf(search_text) != -1) {
-            if (id.length == 5) {
-                name = names[id];
-            } else if (id.length == 8) {
-                name = names[id.substr(0, 5)] + names[id];
-            } else {
-                name = names[id.substr(0, 5)] + names[id.substr(0, 8)] + names[id];
-            }
-            name += '(' + id + ')';
-            $('#list-search').append(
-                $('<a></a>')
-                .text(name)
-                .attr('href', '#' + id)
-                .data('area-id', id)
-                .addClass('area-link')
-                .attr('id', 'area-' + id)
-                .addClass('list-group-item list-group-item-action')
-            );
+            hit = id;
+        } else if ('undefined' !== typeof(name_aliases[id]) && name_aliases[id].indexOf(search_text) != -1) {
+            hit = id;
         }
+
+        if (!hit) {
+            continue;
+        }
+
+        id = hit;
+        if (id.length == 5) {
+            name = names[id];
+        } else if (id.length == 8) {
+            name = names[id.substr(0, 5)] + names[id];
+        } else {
+            name = names[id.substr(0, 5)] + names[id.substr(0, 8)] + names[id];
+        }
+        name += '(' + id + ')';
+        $('#list-search').append(
+            $('<a></a>')
+            .text(name)
+            .attr('href', '#' + id)
+            .data('area-id', id)
+            .addClass('area-link')
+            .attr('id', 'area-' + id)
+            .addClass('list-group-item list-group-item-action')
+        );
     }
 });
 
