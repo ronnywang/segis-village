@@ -25,6 +25,14 @@ div.bottom-row { height: 70%};
         <div class="col">
             <div class="card" style="width: 18rem;">
                 <div class="card-body">
+                    <h5 class="card-title">搜尋：<input type="text" name="search" id="search-box"></h5>
+                </div>
+                <div id="list-search" class="area-list list-group"></div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card" style="width: 18rem;">
+                <div class="card-body">
                     <h5 class="card-title">縣市</h5>
                     <h6 class="card-subtitle mb-2 text-muted" id="choose-county"></h6>
                 </div>
@@ -220,7 +228,7 @@ $.get('history.jsonl', function(lines){
             .data('area-id', id)
             .addClass('area-link')
             .attr('id', 'area-' + id)
-            .addClass('list-group-item list-group-item-action')
+            .addClass('list-group-item')
         );
     }
 
@@ -295,6 +303,33 @@ $.get('history.jsonl', function(lines){
         load_area(document.location.hash.substr(1));
     }
 }, 'text');
+
+$('#search-box').on('input', function(){
+    var search_text = $(this).val();
+    $('#list-search').html('');
+    for (var id in names) {
+        if (names[id].indexOf(search_text) != -1) {
+            if (id.length == 5) {
+                name = names[id];
+            } else if (id.length == 8) {
+                name = names[id.substr(0, 5)] + names[id];
+            } else {
+                name = names[id.substr(0, 5)] + names[id.substr(0, 8)] + names[id];
+            }
+            name += '(' + id + ')';
+            $('#list-search').append(
+                $('<a></a>')
+                .text(name)
+                .attr('href', '#' + id)
+                .data('area-id', id)
+                .addClass('area-link')
+                .attr('id', 'area-' + id)
+                .addClass('list-group-item list-group-item-action')
+            );
+        }
+    }
+});
+
 var map = L.map('mapid').setView([25.000659102852,121.51006510846], 14);
 L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP5/{Style}/{TileMatrixSet}/{z}/{y}/{x}', {
     attribution: '&copy; <a href="http://maps.nlsc.gov.tw/S09SOA/">國土測繪圖資服務雲</a> contributors',
